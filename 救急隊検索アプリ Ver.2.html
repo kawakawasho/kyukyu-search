@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>救急隊 検索・地図</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+  :root{
+    --bg:#f4f6f9;--card:#fff;--ink:#1c2530;--sub:#5b6b7b;--line:#e3e8ee;
+    --hokusei:#2f6fb0;--kyodo:#3f9a55;--funabashi:#c79100;--ibaraki:#cf6b3a;--accent:#1f4e78;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;background:var(--bg);color:var(--ink);display:flex;flex-direction:column;height:100dvh;}
+  header{background:var(--bg);padding:12px 14px 8px;flex:none;}
+  .head-in{max-width:680px;margin:0 auto;}
+  h1{font-size:16px;margin:0 0 9px;font-weight:700;}
+  h1 .cnt{font-size:12px;color:var(--sub);font-weight:500;margin-left:6px;}
+  .searchbox{position:relative;}
+  .searchbox input{width:100%;padding:12px 38px 12px 40px;font-size:16px;border:1.5px solid var(--line);border-radius:12px;background:#fff;outline:none;}
+  .searchbox input:focus{border-color:var(--accent);}
+  .searchbox .ic{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--sub);}
+  .searchbox .clr{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:#e9eef3;color:#5b6b7b;width:25px;height:25px;border-radius:50%;font-size:14px;cursor:pointer;display:none;}
+  .row{display:flex;gap:8px;align-items:center;margin-top:9px;flex-wrap:wrap;}
+  .filters{display:flex;gap:6px;flex-wrap:wrap;flex:1;}
+  .chip{font-size:12.5px;padding:6px 11px;border-radius:20px;border:1.5px solid var(--line);background:#fff;color:var(--sub);cursor:pointer;white-space:nowrap;}
+  .chip.on{color:#fff;border-color:transparent;}
+  .chip[data-f="all"].on{background:var(--accent);}
+  .chip[data-f="ちば北西指令"].on{background:var(--hokusei);}
+  .chip[data-f="ちば共同指令"].on{background:var(--kyodo);}
+  .chip[data-f="船橋市消防（独自）"].on{background:var(--funabashi);}
+  .chip[data-f="茨城消防本部"].on{background:var(--ibaraki);}
+  .toggle{display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;flex:none;}
+  .toggle button{border:none;background:#fff;color:var(--sub);font-size:13px;padding:7px 14px;cursor:pointer;font-weight:600;}
+  .toggle button.on{background:var(--accent);color:#fff;}
+  main{flex:1;min-height:0;position:relative;}
+  .scroll{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .wrap{max-width:680px;margin:0 auto;padding:4px 14px 30px;}
+  .grp{font-size:12px;color:var(--sub);font-weight:700;margin:14px 4px 6px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:11px;}
+  .bar{width:4px;align-self:stretch;border-radius:4px;flex:none;}
+  .bar.h{background:var(--hokusei)}.bar.k{background:var(--kyodo)}.bar.f{background:var(--funabashi)}.bar.i{background:var(--ibaraki)}
+  .info{flex:1;min-width:0;}
+  .nm{font-size:15px;font-weight:700;line-height:1.35;}
+  .nm mark{background:#fff3b0;border-radius:3px;padding:0 1px;}
+  .ym{font-size:12px;color:var(--sub);margin-top:2px;}
+  .meta{margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;}
+  .tag{font-size:11px;padding:2px 7px;border-radius:6px;background:#eef2f6;color:#4a5a6a;}
+  .tag.shi{background:#e7eef7;color:#2f5780;}
+  .empty{text-align:center;color:var(--sub);padding:50px 10px;font-size:14px;}
+  #map{position:absolute;inset:0;}
+  .mk{border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;}
+  .leaflet-popup-content{margin:10px 12px;font-family:inherit;}
+  .pop-h{font-weight:700;font-size:14px;margin-bottom:5px;}
+  .pop-li{font-size:13px;padding:2px 0;border-top:1px solid #eee;}
+  .pop-li .py{color:#5b6b7b;font-size:11px;}
+  .legend{position:absolute;left:10px;bottom:14px;z-index:500;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:11.5px;line-height:1.7;}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px;}
+  .hidden{display:none!important;}
+</style>
+</head>
+<body>
+<header>
+  <div class="head-in">
+    <h1>救急隊 検索・地図<span class="cnt" id="cnt"></span></h1>
+    <div class="searchbox">
+      <span class="ic">🔍</span>
+      <input id="q" type="search" inputmode="search" placeholder="名称・よみ・市町村で検索（漢字／ひらがな可）" autocomplete="off">
+      <button class="clr" id="clr">×</button>
+    </div>
+    <div class="row">
+      <div class="filters" id="filters">
+        <span class="chip on" data-f="all">すべて</span>
+        <span class="chip" data-f="ちば北西指令">北西</span>
+        <span class="chip" data-f="ちば共同指令">共同</span>
+        <span class="chip" data-f="船橋市消防（独自）">船橋</span>
+        <span class="chip" data-f="茨城消防本部">茨城</span>
+      </div>
+      <div class="toggle" id="toggle">
+        <button data-v="list" class="on">リスト</button>
+        <button data-v="map">地図</button>
+      </div>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="scroll" id="listView"><div class="wrap"><div id="list"></div></div></div>
+  <div id="mapView" class="hidden">
+    <div id="map"></div>
+    <div class="legend">
+      <div><i style="background:#2f6fb0"></i>ちば北西指令</div>
+      <div><i style="background:#3f9a55"></i>ちば共同指令</div>
+      <div><i style="background:#c79100"></i>船橋（独自）</div>
+      <div><i style="background:#cf6b3a"></i>茨城消防本部</div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const DATA = [{"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 中山救急1", "yomi": "いちかわしょうぼう なかやまきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 北救急1", "yomi": "いちかわしょうぼう きたきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 南救急1", "yomi": "いちかわしょうぼう みなみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 国府台救急1", "yomi": "いちかわしょうぼう こうのだいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 大洲救急1", "yomi": "いちかわしょうぼう おおずきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 広尾救急1", "yomi": "いちかわしょうぼう ひろおきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 曽谷救急1", "yomi": "いちかわしょうぼう そやきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 東救急1", "yomi": "いちかわしょうぼう ひがしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 行徳救急1", "yomi": "いちかわしょうぼう ぎょうとくきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 西救急1", "yomi": "いちかわしょうぼう にしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "市川市", "name": "市川消防 高谷救急1", "yomi": "いちかわしょうぼう こうやきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 中央救急1", "yomi": "ならしの ちゅうおうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 中央救急2", "yomi": "ならしの ちゅうおうきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 東救急1", "yomi": "ならしの ひがしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 秋津救急1", "yomi": "ならしの あきつきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 藤崎救急1", "yomi": "ならしの ふじさききゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "習志野市", "name": "習志野 谷津救急1", "yomi": "ならしの やつきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代中央救急1", "yomi": "やちよ ちゅうおうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代中央救急2", "yomi": "やちよ ちゅうおうきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代勝田台救急1", "yomi": "やちよ かつただいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代台救急1", "yomi": "やちよだいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代東救急1", "yomi": "やちよ ひがしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "八千代市", "name": "八千代睦救急1", "yomi": "やちよ むつみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "鎌ヶ谷市", "name": "鎌ヶ谷消防 くぬぎ山救急1", "yomi": "かまがやしょうぼう くぬぎやまきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "鎌ヶ谷市", "name": "鎌ヶ谷消防 中央救急1", "yomi": "かまがやしょうぼう ちゅうおうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "鎌ヶ谷市", "name": "鎌ヶ谷消防 中央救急2", "yomi": "かまがやしょうぼう ちゅうおうきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "鎌ヶ谷市", "name": "鎌ヶ谷消防 中央救急3", "yomi": "かまがやしょうぼう ちゅうおうきゅうきゅう3"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "鎌ヶ谷市", "name": "鎌ヶ谷消防 鎌ヶ谷救急1", "yomi": "かまがやしょうぼう かまがやきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "柏市", "name": "柏沼南救急1", "yomi": "かしわしょうなんきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "流山市", "name": "流山中央救急1", "yomi": "ながれやまちゅうおうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "野田市", "name": "野田救急1", "yomi": "のだきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "我孫子市", "name": "我孫子つくし野救急1", "yomi": "あびこ つくしのきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "我孫子市", "name": "我孫子東救急1", "yomi": "あびこ ひがしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "我孫子市", "name": "我孫子湖北救急1", "yomi": "あびこ こほくきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "我孫子市", "name": "我孫子西救急1", "yomi": "あびこ にしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば北西指令", "shi": "我孫子市", "name": "我孫子西救急2", "yomi": "あびこ にしきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "千葉市", "name": "作新台救急", "yomi": "さくしんだいきゅうきゅう"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "千葉市", "name": "千葉 都賀救急", "yomi": "ちば つがきゅうきゅう"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "千葉市", "name": "千葉あすみが丘救急1", "yomi": "ちば あすみがおかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "千葉市", "name": "千葉若葉救急", "yomi": "ちば わかばきゅうきゅう"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "四街道市", "name": "四街道千代田救急1", "yomi": "よつかいどう ちよだきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "四街道市", "name": "四街道千代田救急2", "yomi": "よつかいどう ちよだきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "四街道市", "name": "四街道救急1", "yomi": "よつかいどう きゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "四街道市", "name": "四街道旭救急1", "yomi": "よつかいどう あさひきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "四街道市", "name": "四街道旭救急2", "yomi": "よつかいどう あさひきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "佐倉救急1", "yomi": "さくらきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "佐倉救急2", "yomi": "さくらきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "佐倉救急3", "yomi": "さくらきゅうきゅう3"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "志津南救急1", "yomi": "しづみなみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "志津救急1", "yomi": "しづきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "臼井救急1", "yomi": "うすいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "佐倉市", "name": "角来救急1", "yomi": "かくらいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "酒々井町", "name": "酒々井救急1", "yomi": "しすいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "八街市", "name": "八街南部救急1", "yomi": "やちまた なんぶきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "八街市", "name": "八街救急1", "yomi": "やちまたきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "八街市", "name": "八街救急2", "yomi": "やちまたきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "富里市", "name": "富里北救急", "yomi": "とみさと きたきゅうきゅう"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "富里市", "name": "富里（富里救急1）", "yomi": "とみさと（とみさときゅうきゅう1）"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "富里市", "name": "富里（富里救急2）", "yomi": "とみさと（とみさときゅうきゅう2）"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "富里市", "name": "富里（富里救急3）", "yomi": "とみさと（とみさときゅうきゅう3）"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "公津救急1", "yomi": "こうづきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 三里塚救急1", "yomi": "なりたしょうぼう さんりづかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 下総救急1", "yomi": "なりたしょうぼう しもふさきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 公津救急1", "yomi": "なりたしょうぼう こうづきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 大栄救急1", "yomi": "なりたしょうぼう たいえいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 成田救急1", "yomi": "なりたしょうぼう なりたきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 空港救急1", "yomi": "なりたしょうぼう くうこうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 赤坂救急1", "yomi": "なりたしょうぼう あかさかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "成田市", "name": "成田消防 飯岡救急1", "yomi": "なりたしょうぼう いいおかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "栄町", "name": "栄町救急さかえ1", "yomi": "さかえまちきゅうきゅう さかえ1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "栄町", "name": "栄町救急さかえ2", "yomi": "さかえまちきゅうきゅう さかえ2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "印旛救急1", "yomi": "いんばきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "印西救急1", "yomi": "いんざいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "印西西救急1", "yomi": "いんざいにしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "本埜救急1", "yomi": "もとのきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "牧の原救急1", "yomi": "まきのはらきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "牧の原救急2", "yomi": "まきのはらきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "印西市", "name": "神門救急1", "yomi": "ごうどきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "白井市", "name": "白井救急1", "yomi": "しろいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "白井市", "name": "西白井救急1", "yomi": "にししろいきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "旭市", "name": "旭消防 干潟救急1", "yomi": "あさひしょうぼう ひかたきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "旭市", "name": "旭消防 旭救急1", "yomi": "あさひしょうぼう あさひきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "旭市", "name": "旭消防 海上救急1", "yomi": "あさひしょうぼう うなかみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "旭市", "name": "旭消防 飯岡救急1", "yomi": "あさひしょうぼう いいおかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "銚子市", "name": "銚子消防 救急1", "yomi": "ちょうししょうぼう きゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "銚子市", "name": "銚子消防 救急2", "yomi": "ちょうししょうぼう きゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "銚子市", "name": "銚子消防 海上救急1", "yomi": "ちょうししょうぼう うなかみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "銚子市", "name": "銚子消防 西部救急1", "yomi": "ちょうししょうぼう せいぶきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "匝瑳市", "name": "匝瑳消防 救急1", "yomi": "そうさしょうぼう きゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "匝瑳市", "name": "匝瑳消防 救急2", "yomi": "そうさしょうぼう きゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "匝瑳市", "name": "匝瑳消防 野栄救急1", "yomi": "そうさしょうぼう のさかきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "横芝光町", "name": "匝瑳消防 横芝光救急1", "yomi": "そうさしょうぼう よこしばひかりきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "大網白里市", "name": "山武消防 白里救急1", "yomi": "さんむしょうぼう しらさときゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "東金市", "name": "山武消防 中央救急1", "yomi": "さんむしょうぼう ちゅうおうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "東金市", "name": "山武消防 中央救急2", "yomi": "さんむしょうぼう ちゅうおうきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "山武郡市", "name": "山武消防 南救急1", "yomi": "さんむしょうぼう みなみきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "山武郡市", "name": "山武消防 東救急1", "yomi": "さんむしょうぼう ひがしきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "山武郡市", "name": "山武消防 東救急2", "yomi": "さんむしょうぼう ひがしきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "山武市", "name": "山武消防 山武救急1", "yomi": "さんむしょうぼう さんむきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "九十九里町", "name": "山武消防 九十九里救急1", "yomi": "さんむしょうぼう くじゅうくりきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "芝山町", "name": "しばやま第2救急", "yomi": "しばやまだい2きゅうきゅう"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "芝山町", "name": "山武消防 芝山救急1", "yomi": "さんむしょうぼう しばやまきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 佐原救急1", "yomi": "かとりしょうぼう さわらきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 佐原救急2", "yomi": "かとりしょうぼう さわらきゅうきゅう2"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 十六島救急1", "yomi": "かとりしょうぼう じゅうろくとうきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 小見川救急1", "yomi": "かとりしょうぼう おみがわきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 山田救急1", "yomi": "かとりしょうぼう やまだきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "香取市", "name": "香取消防 栗源救急1", "yomi": "かとりしょうぼう くりもときゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "多古町", "name": "香取消防 多古救急1", "yomi": "かとりしょうぼう たこきゅうきゅう1"}, {"ken": "千葉", "shirei": "ちば共同指令", "shi": "東庄町", "name": "香取消防 東庄救急1", "yomi": "かとりしょうぼう とうのしょうきゅうきゅう1"}, {"ken": "千葉", "shirei": "船橋市消防（独自）", "shi": "船橋市", "name": "船橋消防 船橋東2救急", "yomi": "ふなばししょうぼう ふなばしひがし2きゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鉾田市", "name": "鹿行消防 大洋救急1", "yomi": "ろっこうしょうぼう たいようきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鉾田市", "name": "鹿行消防 旭救急1", "yomi": "ろっこうしょうぼう あさひきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鉾田市", "name": "鹿行消防 鉾田救急1", "yomi": "ろっこうしょうぼう ほこたきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鉾田市", "name": "鹿行消防 鉾田救急2", "yomi": "ろっこうしょうぼう ほこたきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "行方市", "name": "鹿行消防 玉造救急1", "yomi": "ろっこうしょうぼう たまつくりきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "行方市", "name": "鹿行消防 行方救急1", "yomi": "ろっこうしょうぼう なめがたきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "行方市", "name": "鹿行消防 麻生救急1", "yomi": "ろっこうしょうぼう あそうきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "潮来市", "name": "潮来救急2", "yomi": "いたこきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "潮来市", "name": "鹿行消防 潮来救急1", "yomi": "ろっこうしょうぼう いたこきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "潮来市", "name": "鹿行消防 潮来救急2", "yomi": "ろっこうしょうぼう いたこきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "阿見町", "name": "稲敷消防 阿見救急", "yomi": "いなしきしょうぼう あみきゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "阿見町", "name": "阿見第2救急", "yomi": "あみだい2きゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "稲敷市", "name": "稲敷消防 いなほ救急1", "yomi": "いなしきしょうぼう いなほきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "稲敷市", "name": "稲敷消防 いなほ救急2", "yomi": "いなしきしょうぼう いなほきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "稲敷市", "name": "稲敷消防 新河救急1", "yomi": "いなしきしょうぼう しんかわきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "稲敷市", "name": "稲敷消防 桜東救急1", "yomi": "いなしきしょうぼう さくらひがしきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "牛久市", "name": "稲敷消防 牛久救急1", "yomi": "いなしきしょうぼう うしくきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "牛久市", "name": "稲敷消防 牛久救急2", "yomi": "いなしきしょうぼう うしくきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "牛久市", "name": "稲敷消防 牛久東部救急", "yomi": "いなしきしょうぼう うしくとうぶきゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "龍ケ崎市", "name": "稲敷消防 龍ヶ崎救急1", "yomi": "いなしきしょうぼう りゅうがさききゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "龍ケ崎市", "name": "稲敷消防 龍ヶ崎救急2", "yomi": "いなしきしょうぼう りゅうがさききゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "龍ケ崎市", "name": "稲敷消防 龍ヶ崎西部救急", "yomi": "いなしきしょうぼう りゅうがさきせいぶきゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "利根町", "name": "稲敷消防 利根救急1", "yomi": "いなしきしょうぼう とねきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 取手救急1", "yomi": "とりでしょうぼう とりできゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 取手救急2", "yomi": "とりでしょうぼう とりできゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 吉田救急1", "yomi": "とりでしょうぼう よしだきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 宮和田救急1", "yomi": "とりでしょうぼう みやわだきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 戸頭救急1", "yomi": "とりでしょうぼう とがしらきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "取手市", "name": "取手消防 椚木救急1", "yomi": "とりでしょうぼう くぬぎきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鹿嶋市", "name": "鹿島消防 大野救急1", "yomi": "かしましょうぼう おおのきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鹿嶋市", "name": "鹿島消防 鹿島救急1", "yomi": "かしましょうぼう かしまきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "鹿嶋市", "name": "鹿島消防 鹿島救急2", "yomi": "かしましょうぼう かしまきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "神栖市", "name": "鹿島消防 土合救急1", "yomi": "かしましょうぼう どあいきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "神栖市", "name": "鹿島消防 波崎救急1", "yomi": "かしましょうぼう はさききゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "神栖市", "name": "鹿島消防 港救急1", "yomi": "かしましょうぼう みなときゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "神栖市", "name": "鹿島消防 神栖救急1", "yomi": "かしましょうぼう かみすきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "神栖市", "name": "鹿島消防 神栖救急2", "yomi": "かしましょうぼう かみすきゅうきゅう2"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "守谷市", "name": "常総 南守谷救急1", "yomi": "じょうそう みなみもりやきゅうきゅう1"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "つくばみらい市", "name": "つくばみらい救急", "yomi": "つくばみらいきゅうきゅう"}, {"ken": "茨城", "shirei": "茨城消防本部", "shi": "つくばみらい市", "name": "つくばみらい救急1", "yomi": "つくばみらいきゅうきゅう1"}];
+const COORDS = {"市川市": [35.7219, 139.9312], "習志野市": [35.6809, 140.0265], "八千代市": [35.7227, 140.0999], "鎌ヶ谷市": [35.7767, 140.0003], "柏市": [35.8676, 139.9758], "流山市": [35.8562, 139.9027], "野田市": [35.9549, 139.8746], "我孫子市": [35.8642, 140.0281], "千葉市": [35.6073, 140.1063], "四街道市": [35.6699, 140.1672], "佐倉市": [35.7235, 140.2237], "酒々井町": [35.7262, 140.27], "八街市": [35.6667, 140.3183], "富里市": [35.7261, 140.3418], "成田市": [35.7765, 140.3185], "栄町": [35.8402, 140.247], "印西市": [35.832, 140.1457], "白井市": [35.7915, 140.0577], "旭市": [35.7205, 140.647], "銚子市": [35.7345, 140.8267], "匝瑳市": [35.7081, 140.5638], "横芝光町": [35.6623, 140.508], "大網白里市": [35.5211, 140.3203], "東金市": [35.5599, 140.3663], "山武市": [35.6057, 140.4131], "山武郡市": [35.58, 140.4], "九十九里町": [35.5322, 140.4402], "芝山町": [35.692, 140.418], "香取市": [35.8978, 140.4992], "多古町": [35.7359, 140.469], "東庄町": [35.838, 140.64], "船橋市": [35.6942, 139.9826], "鉾田市": [36.158, 140.516], "行方市": [35.997, 140.486], "潮来市": [35.947, 140.555], "阿見町": [36.031, 140.249], "稲敷市": [35.957, 140.323], "牛久市": [35.979, 140.15], "龍ケ崎市": [35.911, 140.182], "利根町": [35.87, 140.235], "取手市": [35.911, 140.05], "鹿嶋市": [35.965, 140.645], "神栖市": [35.89, 140.665], "守谷市": [35.951, 139.975], "つくばみらい市": [35.962, 140.038]};
+const SHIREI_LABEL={"ちば北西指令":"北西","ちば共同指令":"共同","船橋市消防（独自）":"船橋","茨城消防本部":"茨城"};
+const SHIREI_COLOR={"ちば北西指令":"#2f6fb0","ちば共同指令":"#3f9a55","船橋市消防（独自）":"#c79100","茨城消防本部":"#cf6b3a"};
+const SHIREI_CLASS={"ちば北西指令":"h","ちば共同指令":"k","船橋市消防（独自）":"f","茨城消防本部":"i"};
+const kataToHira=s=>s.replace(/[\u30a1-\u30f6]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));
+const norm=s=>kataToHira((s||"").toString().toLowerCase()).replace(/\s+/g,"").replace(/[ヶ]/g,"ケ");
+DATA.forEach(d=>{d._h=norm(d.name+d.yomi+d.shi+d.ken+d.shirei);});
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+let filter="all",query="",view="list";
+const listEl=document.getElementById("list"),cntEl=document.getElementById("cnt");
+const qEl=document.getElementById("q"),clrEl=document.getElementById("clr");
+
+function hi(name){
+  if(!query)return esc(name);
+  const nn=norm(name),nq=norm(query),t=nn.indexOf(nq);
+  if(t<0)return esc(name);
+  const map=[];for(let k=0;k<name.length;k++)map.push(norm(name.slice(0,k+1)).length);
+  let s=-1,e=-1;for(let k=0;k<name.length;k++){const p=k===0?0:map[k-1];if(p<=t&&t<map[k]){s=k;break;}}
+  const end=t+nq.length;for(let k=0;k<name.length;k++){if(map[k]>=end){e=k;break;}}
+  if(s>=0&&e>=s)return esc(name.slice(0,s))+"<mark>"+esc(name.slice(s,e+1))+"</mark>"+esc(name.slice(e+1));
+  return esc(name);
+}
+function filtered(){const nq=norm(query);return DATA.filter(d=>(filter==="all"||d.shirei===filter)&&(!nq||d._h.includes(nq)));}
+
+function renderList(){
+  const rows=filtered();
+  cntEl.textContent="（"+rows.length+"件）";
+  if(!rows.length){listEl.innerHTML='<div class="empty">該当なし<br>別の語で試してください</div>';return;}
+  let html="",cur="";
+  rows.forEach(d=>{
+    if(d.shirei!==cur){cur=d.shirei;html+='<div class="grp">'+esc(cur)+'</div>';}
+    html+='<div class="card"><div class="bar '+SHIREI_CLASS[d.shirei]+'"></div><div class="info">'+
+      '<div class="nm">'+hi(d.name)+'</div><div class="ym">'+esc(d.yomi)+'</div>'+
+      '<div class="meta"><span class="tag">'+esc(d.ken)+'</span><span class="tag shi">'+esc(d.shi)+
+      '</span><span class="tag">'+esc(SHIREI_LABEL[d.shirei])+'</span></div></div></div>';
+  });
+  listEl.innerHTML=html;
+}
+
+let map,layer;
+function initMap(){
+  map=L.map("map",{zoomControl:true}).setView([35.85,140.30],9);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:18,attribution:"&copy; OpenStreetMap"}).addTo(map);
+  layer=L.layerGroup().addTo(map);
+}
+function renderMap(){
+  if(!map)initMap();
+  layer.clearLayers();
+  const rows=filtered();
+  cntEl.textContent="（"+rows.length+"件）";
+  const byShi={};
+  rows.forEach(d=>{(byShi[d.shi]=byShi[d.shi]||[]).push(d);});
+  const pts=[];
+  Object.keys(byShi).forEach(shi=>{
+    const c=COORDS[shi];if(!c)return;
+    const units=byShi[shi];const col=SHIREI_COLOR[units[0].shirei];
+    const n=units.length,sz=Math.min(40,22+n*1.6);
+    const icon=L.divIcon({className:"",html:'<div class="mk" style="width:'+sz+'px;height:'+sz+'px;background:'+col+'">'+n+'</div>',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
+    let pop='<div class="pop-h">'+esc(shi)+'（'+n+'隊）</div>';
+    units.forEach(u=>{pop+='<div class="pop-li">'+esc(u.name)+'<br><span class="py">'+esc(u.yomi)+'</span></div>';});
+    L.marker(c,{icon}).addTo(layer).bindPopup(pop,{maxWidth:280});
+    pts.push(c);
+  });
+  if(pts.length){try{map.fitBounds(pts,{padding:[40,40],maxZoom:11});}catch(e){}}
+  setTimeout(()=>map.invalidateSize(),50);
+}
+
+function render(){view==="list"?renderList():renderMap();}
+
+qEl.addEventListener("input",e=>{query=e.target.value;clrEl.style.display=query?"block":"none";render();});
+clrEl.addEventListener("click",()=>{query="";qEl.value="";clrEl.style.display="none";qEl.focus();render();});
+document.getElementById("filters").addEventListener("click",e=>{
+  const c=e.target.closest(".chip");if(!c)return;filter=c.dataset.f;
+  document.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===c));render();});
+document.getElementById("toggle").addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;view=b.dataset.v;
+  document.querySelectorAll("#toggle button").forEach(x=>x.classList.toggle("on",x===b));
+  document.getElementById("listView").classList.toggle("hidden",view!=="list");
+  document.getElementById("mapView").classList.toggle("hidden",view!=="map");
+  render();});
+render();
+</script>
+</body>
+</html>
